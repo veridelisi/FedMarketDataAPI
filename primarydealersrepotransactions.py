@@ -67,13 +67,12 @@ filtered_repurchase_agreements = merged_data[merged_data['Label'].str.startswith
 # Display the filtered DataFrame
 filtered_repurchase_agreements
 
-# Assuming filtered_repurchase_agreements is the DataFrame that we want to save as an Excel file
-# Save the DataFrame to an Excel file in the writable filesystem of the environment
-excel_filepath = 'filtered_repurchase_agreements.xlsx'
-filtered_repurchase_agreements.to_excel(excel_filepath, index=False)
+# Assuming 'filtered_repurchase_agreements' is your DataFrame
+# Remove "Repurchase Agreements:" from each row in the "Label" column
+filtered_repurchase_agreements['Label'] = filtered_repurchase_agreements['Label'].str.replace("Repurchase Agreements:", "")
 
-# Provide the path for download
-excel_filepath
+# Now the "Label" column should have the "Repurchase Agreements:" statement removed from every row
+filtered_repurchase_agreements
 
 
 
