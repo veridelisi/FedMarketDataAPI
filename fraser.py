@@ -4,7 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-# --- Ayarlar ---
+# --- Settings ---
 BASE_DOMAIN = 'https://fraser.stlouisfed.org'
 BROWSE_URL  = BASE_DOMAIN + (
     '/title/federal-open-market-committee-meeting-minutes-transcripts-documents-677'
@@ -13,10 +13,10 @@ BROWSE_URL  = BASE_DOMAIN + (
 DEST_DIR    = 'pdfs/1930s'
 DATES_FILE  = 'dates_1930s.txt'
 
-# Tarih eşiği: 1 Mart 1936
+# Date threshold: March 1, 1936
 threshold = datetime(1936, 3, 1)
 
-# --- Yardımcılar ---
+# --- Helpers ---
 def in_colab() -> bool:
     try:
         import google.colab  # type: ignore
@@ -27,7 +27,7 @@ def in_colab() -> bool:
 def ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)
 
-# Daha sağlam istekler için session + header
+# More robust requests: session + header
 session = requests.Session()
 session.headers.update({
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -35,15 +35,15 @@ session.headers.update({
 })
 TIMEOUT = 30
 
-# --- 0) Klasörü hazırla ---
+# --- 0) Prepare directory ---
 ensure_dir(DEST_DIR)
 
-# --- 1) Sayfayı indir ve parse et ---
+# --- 1) Fetch and parse the page ---
 resp = session.get(BROWSE_URL, timeout=TIMEOUT)
 resp.raise_for_status()
 soup = BeautifulSoup(resp.text, 'html.parser')
 
-# --- 2) “Meeting, Month Day, Year” linklerinden datetime’lar oluştur ---
+# --- 2) Build datetimes from links like “Meeting, Month Day, Year” ---
 dates = []
 for a in soup.find_all('a'):
     text = a.get_text(strip=True)
@@ -52,22 +52,22 @@ for a in soup.find_all('a'):
             dt = datetime.strptime(text, 'Meeting, %B %d, %Y')
             dates.append(dt)
         except ValueError:
-            # format tutmayanları atla
+            # skip non-matching formats
             continue
 
-# --- 3) Tarihleri YYYY-MM-DD olarak kaydet ---
+# --- 3) Save dates as YYYY-MM-DD ---
 with open(DATES_FILE, 'w', encoding='utf-8') as f:
     for dt in dates:
         f.write(dt.strftime('%Y-%m-%d') + '\n')
-print(f"[✔] {len(dates)} toplantı tarihi kaydedildi → {DATES_FILE}")
+print(f"[✔] {len(dates)} meeting dates saved → {DATES_FILE}")
 
-# --- 4) Her tarih için doğru dosya adını seçip indir ---
+# --- 4) For each date, choose the correct filename and download ---
 success, fail = 0, 0
 for dt in dates:
     ymd = dt.strftime('%Y%m%d')
 
-    # 1 Mart 1936 öncesi: rg82_fomcminutes_YYYYMMDD.pdf
-    # 1 Mart 1936 ve sonrası: YYYYMMDDMinutesv.pdf
+    # Before March 1, 1936: rg82_fomcminutes_YYYYMMDD.pdf
+    # On/after March 1, 1936: YYYYMMDDMinutesv.pdf
     if dt < threshold:
         pdf_name = f'rg82_fomcminutes_{ymd}.pdf'
     else:
@@ -77,35 +77,35 @@ for dt in dates:
     outpath = os.path.join(DEST_DIR, pdf_name)
 
     if os.path.exists(outpath):
-        print(f"[●] Atlanıyor (zaten var): {pdf_name}")
+        print(f"[●] Skipping (already exists): {pdf_name}")
         continue
 
-    print(f"[↓] İndiriliyor: {pdf_name}")
+    print(f"[↓] Downloading: {pdf_name}")
     r = session.get(pdf_url, timeout=TIMEOUT)
     if r.status_code == 200 and r.content.startswith(b'%PDF'):
         with open(outpath, 'wb') as f:
             f.write(r.content)
         success += 1
     else:
-        print(f"  ⚠️  Hata {r.status_code} indirirken: {pdf_url}")
+        print(f"  ⚠️  Error {r.status_code} while downloading: {pdf_url}")
         fail += 1
 
-print(f"✅ İndirme tamamlandı. Başarılı: {success}, Başarısız: {fail}")
-print(f"📁 Klasör: {os.path.abspath(DEST_DIR)}")
+print(f"✅ Download finished. Success: {success}, Failed: {fail}")
+print(f"📁 Folder: {os.path.abspath(DEST_DIR)}")
 
-# --- 5) ZIP oluştur ve gerekirse otomatik indir ---
+# --- 5) Create ZIP and optionally auto-download ---
 zip_base = 'FOMC_1930s'
 zip_path = shutil.make_archive(zip_base, 'zip', DEST_DIR)
-print(f"🗜 ZIP hazır: {zip_path}")
+print(f"🗜 ZIP ready: {zip_path}")
 
 if in_colab():
-    # Colab'da otomatik indir
+    # Auto-download in Colab
     try:
         from google.colab import files
         files.download(zip_path)
-        print("⬇️ ZIP indiriliyor (Colab).")
+        print("⬇️ Downloading ZIP (Colab).")
     except Exception as e:
-        print(f"Colab otomatik indirme hatası: {e}\nZIP dosyasını sol panelden manuel indirebilirsiniz.")
+        print(f"Colab auto-download error: {e}\nYou can download the ZIP manually from the left panel.")
 else:
-    print("Colab dışında çalışıyorsunuz. ZIP dosyasını bu yoldan bulabilirsiniz:")
+    print("You are running outside Colab. You can find the ZIP file at this path:")
     print(os.path.abspath(zip_path))
